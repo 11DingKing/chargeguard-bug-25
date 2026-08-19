@@ -1,6 +1,9 @@
 package charging
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type ReminderSender interface{ Send(context.Context) error }
 type ReminderAudit interface {
@@ -11,11 +14,14 @@ type NotificationCursor struct{ Position int }
 func DeliverReminder(ctx context.Context, s ReminderSender, a ReminderAudit, c *NotificationCursor) error {
 	err := s.Send(ctx)
 	if err != nil {
-		_ = a.Write(context.Background(), "sent")
-		c.Position++
-		return nil
+		return fmt.Errorf("send reminder: %w", err)
 	}
-	_ = a.Write(context.Background(), "sent")
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("cancel reminder: %w", err)
+	}
+	if err := a.Write(ctx, "sent"); err != nil {
+		return fmt.Errorf("audit reminder: %w", err)
+	}
 	c.Position++
 	return nil
 }
